@@ -1,0 +1,5 @@
+build/
+*.ttc
+*.ttm
+*.ibc
+depends/

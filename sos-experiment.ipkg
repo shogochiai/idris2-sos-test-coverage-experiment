@@ -1,0 +1,17 @@
+package sos-experiment
+version = 0.1.0
+authors = "Experiment"
+brief = "System of Systems test coverage experiment with GFR Monad"
+
+depends = base
+
+sourcedir = "src"
+
+modules = SoS.GFR
+        , SoS.Services
+        , SoS.Composition
+        , SoS.Main
+        , SoS.Tests.AllTests
+
+main = SoS.Main
+executable = "sos-demo"
