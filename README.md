@@ -102,6 +102,13 @@ Bugs (UnhandledInput): 0
 Unknown CRASHes:      0
 ```
 
+> **Note**: Coverage can exceed 100% due to measurement unit mismatch:
+> - Numerator: BranchPoints from Chez Scheme profiler (`.ss.html`)
+> - Denominator: Canonical cases from `--dumpcases` static analysis
+>
+> These measure different granularities (profiler branch points vs pattern match cases).
+> This doesn't affect the validity of the O(N) complexity claim.
+
 ## Why O(N) Instead of O(2^N)?
 
 ### Type System Eliminates Unreachable Paths
