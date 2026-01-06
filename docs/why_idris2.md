@@ -49,7 +49,7 @@ where:
 - $$P_3$$: Executable semantics (compiles to runnable code)
 - $$P_4$$: Controlled erasure (programmer decides what persists)
 
-We claim: $$|\mathcal{L}_{\text{adequate}}| \approx 1$$ in practice, and Idris2 $$\in \mathcal{L}_{\text{adequate}}$$.
+We claim: $|\mathcal{L}_{\text{adequate}}| \approx 1$ in practice, and Idris2 $\in \mathcal{L}_{\text{adequate}}$.
 
 ---
 
