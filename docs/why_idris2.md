@@ -34,6 +34,25 @@ Most mainstream languages satisfy only a subset of these requirements.
 
 ---
 
+## Formal Requirements
+
+Let $$\mathcal{L}$$ be the set of candidate languages. We require:
+
+$$
+\mathcal{L}_{\text{adequate}} = \{ L \in \mathcal{L} \mid L \text{ satisfies } P_1 \land P_2 \land P_3 \land P_4 \}
+$$
+
+where:
+
+- $$P_1$$: Full dependent types ($$\Pi$$-types, $$\Sigma$$-types as primitives)
+- $$P_2$$: Runtime-preservable proofs (evidence not erased by default)
+- $$P_3$$: Executable semantics (compiles to runnable code)
+- $$P_4$$: Controlled erasure (programmer decides what persists)
+
+We claim: $$|\mathcal{L}_{\text{adequate}}| \approx 1$$ in practice, and Idris2 $$\in \mathcal{L}_{\text{adequate}}$$.
+
+---
+
 ## Why Not Lean?
 
 Lean is an excellent **proof assistant** and a strong candidate for formal mathematics.
@@ -43,8 +62,18 @@ However, it is optimized around a fundamentally different design goal.
 
 Lean enforces a strict separation between:
 
-- `Prop` (proofs)
-- `Type` (computational data)
+$$
+\mathsf{Prop} \quad \text{(proofs, erased at runtime)}
+$$
+$$
+\mathsf{Type} \quad \text{(computational data, preserved)}
+$$
+
+This separation is fundamental:
+
+$$
+\forall p : \mathsf{Prop}.\; \mathsf{erase}(p) = \bot
+$$
 
 Proofs are *erased* during execution by design.
 
@@ -57,7 +86,7 @@ This makes Lean unsuitable for systems where:
 In this project, proofs are not meta-level artifacts.
 They are *part of the system state*.
 
-Lean’s design explicitly forbids this.
+Lean's design explicitly forbids this.
 
 ---
 
@@ -75,6 +104,18 @@ While Haskell supports:
 - Singleton encodings
 
 these features simulate dependent types rather than natively supporting them.
+
+Formally, Haskell provides:
+
+$$
+\mathsf{Type} : \mathsf{Type} \quad \text{(kind system)}
+$$
+
+but lacks:
+
+$$
+\Pi (x : A). B(x) \quad \text{(true dependent function types)}
+$$
 
 As a result:
 
@@ -99,9 +140,23 @@ Idris2 occupies a rare design point:
 
 ### Core Properties
 
+Idris2 provides the full Calculus of Constructions with:
+
+$$
+\Pi (x : A). B(x) \quad \text{(dependent functions)}
+$$
+$$
+\Sigma (x : A). B(x) \quad \text{(dependent pairs)}
+$$
+$$
+\mathsf{Type}_n : \mathsf{Type}_{n+1} \quad \text{(universe hierarchy)}
+$$
+
+Additionally:
+
 - Types and values share the same computational universe
 - Proofs are ordinary values and may persist at runtime
-- Erasure is explicit and controlled, not implicit
+- Erasure is explicit via quantity annotations: $$0$$ (erased), $$1$$ (linear), $$\omega$$ (unrestricted)
 - Linear types allow direct modeling of resource usage
 - Backends exist for C, Chez Scheme, and WASM-like targets
 
@@ -120,10 +175,18 @@ In this project, Idris2 is not treated as a general-purpose application language
 
 Instead, it plays the role of a **semantic definition language**.
 
+Formally, we establish a hierarchy:
+
+$$
+\mathsf{Idris2} \xrightarrow{\text{defines}} \mathsf{Semantics} \xrightarrow{\text{lowers to}} \mathsf{Target}
+$$
+
+where $$\mathsf{Target} \in \{\text{Rust}, \text{Haskell}, \text{Solidity}, \ldots\}$$
+
 Concretely:
 
 - Idris2 defines the *meaning* of computation
-- Other languages (Rust, Haskell, Solidity, etc.) are potential *lowerings*
+- Other languages are potential *lowerings*
 - AI agents operate primarily at the Idris2 level
 - Correctness flows downstream, not upstream
 
@@ -139,7 +202,18 @@ This mirrors the role of:
 
 ## AI-Assisted Development Considerations
 
-Idris2’s strictness is a feature, not a drawback, for AI-driven workflows.
+Idris2's strictness is a feature, not a drawback, for AI-driven workflows.
+
+Define the feedback function for AI agents:
+
+$$
+\mathsf{feedback}(c) = \begin{cases}
+\mathsf{Accept} & \text{if } \vdash c : T \\
+\mathsf{Reject}(\mathsf{error}) & \text{otherwise}
+\end{cases}
+$$
+
+Idris2 maximizes the information content of $$\mathsf{Reject}$$:
 
 - Ill-defined code fails immediately
 - Partial definitions are rejected
@@ -150,19 +224,19 @@ This creates a strong feedback signal for AI agents:
 > **Either the semantics are correct, or the program does not exist.**
 
 In contrast, more permissive languages allow
-“plausible but semantically false” implementations to survive.
+"plausible but semantically false" implementations to survive.
 
 For automated reasoning and synthesis, this distinction is critical.
 
 ---
 
-## Addressing the “Immaturity” Concern
+## Addressing the "Immaturity" Concern
 
 It is true that Idris2 is:
 
 - Less popular
 - Less standardized
-- Less “production-ready” than mainstream alternatives
+- Less "production-ready" than mainstream alternatives
 
 However, this project explicitly targets:
 
@@ -179,21 +253,28 @@ without fighting entrenched idioms.
 
 ## Summary
 
-Idris2 is chosen because it uniquely satisfies the following conjunction:
+Idris2 is chosen because it uniquely satisfies:
 
-- Fully dependent types
-- Executable semantics
-- Runtime-preserving proofs
-- System-level resource modeling
-- AI-compatible failure modes
+$$
+\mathsf{Idris2} \in \mathcal{L}_{\text{adequate}} = \{ L \mid P_1(L) \land P_2(L) \land P_3(L) \land P_4(L) \}
+$$
+
+where:
+
+| Property | Description | Lean | Haskell | Idris2 |
+|----------|-------------|------|---------|--------|
+| $$P_1$$ | Full dependent types | ✓ | ✗ | ✓ |
+| $$P_2$$ | Runtime-preservable proofs | ✗ | N/A | ✓ |
+| $$P_3$$ | Executable semantics | ✓ | ✓ | ✓ |
+| $$P_4$$ | Controlled erasure | ✗ | N/A | ✓ |
 
 This project does not ask:
 
-> “Which language is most popular?”
+> "Which language is most popular?"
 
 It asks:
 
-> “Which language allows the system itself to be defined without semantic loss?”
+> "Which language allows the system itself to be defined without semantic loss?"
 
 For this purpose, **Idris2 is not a compromise**.
 
@@ -211,4 +292,3 @@ It is the minimal adequate choice.
 Downstream implementations may—and often should—be written in other languages.
 
 Idris2 defines *what they mean*.
-
