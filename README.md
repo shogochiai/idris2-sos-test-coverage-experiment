@@ -1,143 +1,99 @@
 # System of Systems Test Coverage Experiment
 
-**Claim**: GFR Monad + Dependent Types reduce test complexity from O(2^N) to O(N)
+**Claim**: Under specific axioms, GFR Monad + Dependent Types reduce test complexity from O(2^N) to O(N).
 
-## Background
+> **Important**: This claim has a precise validity domain. See [FORMAL_SPEC.md](FORMAL_SPEC.md) for axioms, proofs, and counterexamples.
 
-When composing N services in a System of Systems (SoS), traditional testing requires covering all possible success/failure combinations:
+## TL;DR
 
-- 2 services: 2^2 = 4 test cases
-- 4 services: 2^4 = 16 test cases
-- 8 services: 2^8 = 256 test cases
-- N services: **O(2^N)** test cases
+| Metric | Traditional | GFR Approach |
+|--------|-------------|--------------|
+| Test cases (N=4) | 16 | 7 |
+| Complexity | O(2^N) | O(N × K) |
+| Validity | Always | Under Axioms 1-5 |
 
-This exponential growth makes comprehensive testing impractical for real-world microservice architectures.
+## Definitions
 
-## Solution: GFR Monad + Dependent Types
+Before the claim makes sense, we must fix terminology:
 
-The **Graded Failure-Recovery (GFR) Monad** tracks failure obligations at the type level:
+- **N** = Number of services in composition (this experiment: N=4)
+- **K** = Maximum failure categories per service (this experiment: K=1)
+- **Traditional testing** = Enumerating all success/failure combinations at integration level
+- **GFR testing** = Handler unit tests + integration path tests
 
-```idris
-data GFR : Obligations -> Type -> Type where
-  GOk   : a -> Evidence -> GFR obs a
-  GFail : Fail -> Evidence -> GFR obs a
-```
+## The Claim (Formal)
 
-Key properties:
-1. **Obligations are type-tracked**: `GFR [NetworkObl] a` means "may fail with network errors"
-2. **Handlers discharge obligations**: `handleNetwork : GFR (NetworkObl :: obs) a -> GFR obs a`
-3. **Execution requires empty obligations**: `runGFR : GFR [] a -> Either (Fail, Evidence) (a, Evidence)`
-
-## Experiment Setup
-
-### Services Composed (4 total)
+**Proposition**: Under Axioms 1-5 (see [FORMAL_SPEC.md](FORMAL_SPEC.md)), for N services with at most K obligations each:
 
 ```
-Auth Service ──┐
-               ├──> Order Workflow ──> Result
-Product Service┤
-               │
-Order Service ─┤
-               │
-Notify Service─┘
+T_gfr(N, K) = O(N × K)
 ```
 
-Each service can fail with different categories:
-- `NetworkFail` - transient network issues (retryable)
-- `AuthFail` - authentication failures
-- `ServiceFail` - service-level errors
-- `ValidationFail` - input validation errors
+When K is constant, this simplifies to **O(N)**.
 
-### Composition
+### Required Axioms
 
-```idris
-placeOrder : String -> String -> Nat -> Nat -> GFR [NetworkObl] OrderResult
-placeOrder username password productId quantity =
-  authServiceU username password >>= \user =>
-  productServiceU productId >>= \product =>
-  orderServiceU (MkOrder user.id productId quantity) >>= \result =>
-  notifyServiceU user.id ("Order " ++ show result.orderId ++ " placed") >>= \_ =>
-  GOk result emptyEvidence
-```
+1. **Independence**: Services fail independently (no correlated failures)
+2. **Handler Completeness**: Each handler fully addresses its failure category
+3. **Compositional Recovery**: Recovery produces valid continuation values
+4. **Obligation Disjointness**: No two services share identical failure handling requirements
+5. **Bounded Failure Modes**: Each service has ≤ K failure categories
 
-### Safe Execution
+**If any axiom is violated, complexity may revert to O(2^N).** See [FORMAL_SPEC.md § Counterexamples](FORMAL_SPEC.md#4-counterexamples-boundary-conditions).
 
-```idris
-safePlaceOrder : String -> String -> Nat -> Nat -> GFR [] OrderResult
-safePlaceOrder username password productId quantity =
-  handleAll (recoverWithDefault defaultResult) $
-  handleNetwork (recoverWithDefault defaultResult) $
-  placeOrder username password productId quantity
-```
+## Experimental Evidence
 
-## Results
+### Baseline: Traditional O(2^N) Tests
 
-### Test Count
-
-| Approach | Test Cases | Complexity |
-|----------|------------|------------|
-| Traditional | 16+ | O(2^N) |
-| GFR + Types | 7 | O(N) |
-| **Reduction** | **56%** | **Exponential → Linear** |
-
-### Tests Written
-
-**Handler Tests (3)** - Test each handler independently:
-1. Network handler recovers network failures
-2. Network handler passes through non-network failures
-3. Success passes through handler unchanged
-
-**Integration Tests (4)** - Test key scenarios:
-1. Happy path (all services succeed)
-2. Auth fallback (invalid credentials → default)
-3. Network error handled (timeout → recovery)
-4. Product not found handled (service fail → default)
-
-### idris2-coverage Report
+See [`src/SoS/Tests/Baseline/TraditionalTests.idr`](src/SoS/Tests/Baseline/TraditionalTests.idr):
 
 ```
+16 test cases covering all (Auth × Product × Order × Notify) combinations:
+SSSS, SSSF, SSFS, SSFF, SFSS, SFSF, SFFS, SFFF,
+FSSS, FSSF, FSFS, FSFF, FFSS, FFSF, FFFS, FFFF
+```
+
+### GFR: O(N) Tests
+
+See [`src/SoS/Tests/AllTests.idr`](src/SoS/Tests/AllTests.idr):
+
+```
+7 test cases:
+- 3 handler behavior tests (unit level)
+- 4 integration path tests (happy + key failure scenarios)
+```
+
+### Measurement
+
+```bash
+$ idris2-cov .
 Runtime Coverage:     51/42 (121%)
 Canonical branches:   50
 Bugs (UnhandledInput): 0
-Unknown CRASHes:      0
 ```
 
-> **Note**: Coverage can exceed 100% due to measurement unit mismatch:
-> - Numerator: BranchPoints from Chez Scheme profiler (`.ss.html`)
-> - Denominator: Canonical cases from `--dumpcases` static analysis
->
-> These measure different granularities (profiler branch points vs pattern match cases).
-> This doesn't affect the validity of the O(N) complexity claim.
+> **Note on 121%**: Numerator (Chez profiler BranchPoints) and denominator (dumpcases canonical cases) measure different granularities. This is a tooling artifact, not a flaw in the complexity argument.
 
-## Why O(N) Instead of O(2^N)?
+## Validity Domain
 
-### Type System Eliminates Unreachable Paths
+This experiment satisfies all 5 axioms:
 
-Traditional testing must cover all 2^N combinations because any service might fail at runtime. With GFR:
+| Axiom | How Satisfied |
+|-------|---------------|
+| Independence | Services are pure functions with no shared state |
+| Handler Completeness | `handleAll` catches all remaining failures |
+| Compositional Recovery | Default values (`MkOrderResult 0 0`) are valid |
+| Obligation Disjointness | Single `NetworkObl` type |
+| Bounded Failure Modes | K=1 (only NetworkFail actively handled) |
 
-1. **Obligation tracking**: The type `GFR [NetworkObl] a` precisely specifies which failures are possible
-2. **Compile-time verification**: Unhandled obligations cause compilation errors
-3. **Handler composition**: Each handler is tested once, then composed safely
+### When This Approach Fails
 
-### Test Strategy
+The complexity reverts to O(2^N) when:
 
-Instead of testing all combinations:
-
-```
-Traditional: Test(S1 × S2 × S3 × S4) = 16 cases
-```
-
-We test handlers and compositions separately:
-
-```
-GFR: Test(H1) + Test(H2) + Test(H3) + Test(Composition) = 7 cases
-```
-
-The type system guarantees that if:
-- Each handler correctly handles its obligation type
-- The composition type-checks
-
-Then the composed system correctly handles all failure modes.
+- **Cascading failures**: Service A's failure changes Service B's failure mode
+- **Context-dependent recovery**: Different services need different handling for same failure type
+- **Partial handlers**: Handler catches some but not all failures of its category
+- **State dependencies**: Recovery value causes downstream validation failures
 
 ## Running the Experiment
 
@@ -145,43 +101,71 @@ Then the composed system correctly handles all failure modes.
 # Build
 pack build sos-experiment.ipkg
 
-# Run demo
+# Run GFR demo
 ./build/exec/sos-demo
 
-# Run with idris2-coverage
+# Run coverage analysis
 idris2-cov .
 ```
 
 ## Project Structure
 
 ```
-src/
-  SoS/
-    GFR.idr          # Simplified GFR Monad
-    Services.idr     # Mock external services
-    Composition.idr  # 4-service workflow composition
-    Main.idr         # CLI demo
-    Tests/
-      AllTests.idr   # Test suite (idris2-cov compatible)
+├── FORMAL_SPEC.md                    # Axioms, propositions, counterexamples
+├── README.md                         # This file
+├── sos-experiment.ipkg
+└── src/SoS/
+    ├── GFR.idr                       # Simplified GFR Monad
+    ├── Services.idr                  # Mock services
+    ├── Composition.idr               # 4-service workflow
+    ├── Main.idr                      # CLI demo
+    └── Tests/
+        ├── AllTests.idr              # GFR tests (7 cases)
+        └── Baseline/
+            └── TraditionalTests.idr  # Traditional tests (16 cases)
 ```
 
-## Dependencies
+## How It Works
 
-- [Idris2](https://github.com/idris-lang/Idris2)
-- [pack](https://github.com/stefan-hoeck/idris2-pack)
-- [idris2-coverage](https://github.com/shogochiai/idris2-coverage) (for coverage analysis)
+### GFR Monad
+
+```idris
+data GFR : Obligations -> Type -> Type where
+  GOk   : a -> Evidence -> GFR obs a
+  GFail : Fail -> Evidence -> GFR obs a
+```
+
+- Type parameter `Obligations` tracks unhandled failure categories
+- Handlers transform `GFR (φ :: obs) a → GFR obs a`
+- `runGFR : GFR [] a → Either ...` requires all obligations discharged
+
+### Why Fewer Tests Suffice
+
+Traditional testing must cover all 2^N combinations because failures are opaque at runtime.
+
+GFR makes failures **transparent at the type level**:
+1. Compiler verifies all obligations are handled
+2. Each handler is tested once (unit level)
+3. Integration tests verify composition, not combinations
+
+The type system provides the "glue" that traditional testing must cover manually.
 
 ## Related Work
 
-- **FR Monad**: Based on "Recovery-Preserving Kleisli Semantics for World-Computer Virtual Machines"
-- **Graded Monads**: Type-level effect tracking
-- **idris2-cdk**: Full implementation with ICP/EVM support
+- [FR Monad Paper](https://example.com) - "Recovery-Preserving Kleisli Semantics for World-Computer Virtual Machines"
+- [idris2-coverage](https://github.com/shogochiai/idris2-coverage) - Proof-aware coverage tool
+- [idris2-cdk](https://github.com/AdrianLxM/idris2-cdk) - Full GFR implementation for ICP/EVM
 
 ## Conclusion
 
-By combining:
-1. **GFR Monad** for explicit failure tracking
-2. **Dependent types** for compile-time verification
-3. **idris2-coverage** for measuring actual coverage
+The claim **"O(2^N) → O(N)"** is:
 
-We achieve **linear test complexity O(N)** instead of exponential O(2^N) for System of Systems composition, while maintaining comprehensive coverage of all reachable failure modes.
+- ✅ **Valid** under the 5 axioms (independence, completeness, recovery, disjointness, boundedness)
+- ❌ **Invalid** when services have correlated failures, context-dependent recovery, or shared obligations
+
+This repository provides:
+1. Formal specification of validity domain ([FORMAL_SPEC.md](FORMAL_SPEC.md))
+2. Baseline comparison (16 traditional tests vs 7 GFR tests)
+3. Reproducible measurement via `idris2-cov`
+
+The value is not "magic complexity reduction" but **making the required assumptions explicit** and **leveraging the type system to enforce them**.

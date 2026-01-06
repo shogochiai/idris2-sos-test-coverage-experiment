@@ -12,6 +12,7 @@ modules = SoS.GFR
         , SoS.Composition
         , SoS.Main
         , SoS.Tests.AllTests
+        , SoS.Tests.Baseline.TraditionalTests
 
 main = SoS.Main
 executable = "sos-demo"
